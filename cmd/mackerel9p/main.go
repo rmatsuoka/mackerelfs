@@ -6,7 +6,7 @@ import (
 	"os"
 
 	"github.com/mackerelio/mackerel-client-go"
-	"github.com/rmatsuoka/mackerelfs/hostfs"
+	"github.com/rmatsuoka/mackerelfs"
 	"github.com/rmatsuoka/ya9p"
 )
 
@@ -29,6 +29,6 @@ func main() {
 		if err != nil {
 			log.Print(err)
 		}
-		go ya9p.Serve(conn, ya9p.FS(hostfs.FS(client)))
+		go ya9p.Serve(conn, ya9p.FS(mackerelfs.HostFS(client)))
 	}
 }

@@ -1,4 +1,4 @@
-package metricfs
+package mackerelfs
 
 import (
 	"bytes"
@@ -11,19 +11,19 @@ import (
 	"github.com/rmatsuoka/mackerelfs/internal/muxfs"
 )
 
-type Metrics interface {
+type metrics interface {
 	ListNames() ([]string, error)
 	Fetch(name string, from, to int64) ([]mackerel.MetricValue, error)
 }
 
-func FS(m Metrics) fs.FS {
+func metricFS(m metrics) fs.FS {
 	mfs := muxfs.NewFS()
 	mfs.VarFS(&metricsVarFS{m})
 	return mfs
 }
 
 type metricsVarFS struct {
-	m Metrics
+	m metrics
 }
 
 func (v *metricsVarFS) All() (muxfs.Seq[string], error) {
