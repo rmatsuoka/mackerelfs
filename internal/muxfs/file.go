@@ -43,12 +43,14 @@ func CtlFile(fn func(s string) error) File {
 type ctlFile struct {
 	name string
 	w    *io.PipeWriter
+	done <-chan struct{}
 }
 
 func newCtlFile(base string, fn func(s string) error) *ctlFile {
 	r, w := io.Pipe()
-
+	done := make(chan struct{})
 	go func() {
+		defer close(done)
 		s := bufio.NewScanner(r)
 		for s.Scan() {
 			if err := fn(s.Text()); err != nil {
@@ -58,12 +60,16 @@ func newCtlFile(base string, fn func(s string) error) *ctlFile {
 		}
 		r.CloseWithError(s.Err())
 	}()
-	return &ctlFile{name: base, w: w}
+	return &ctlFile{name: base, w: w, done: done}
 }
 
 func (f *ctlFile) Stat() (fs.FileInfo, error) {
 	return &fileInfo{name: f.name, mode: 0222}, nil
 }
 func (f *ctlFile) Write(p []byte) (int, error) { return f.w.Write(p) }
-func (f *ctlFile) Close() error                { return f.w.Close() }
-func (f *ctlFile) Read(_ []byte) (int, error)  { return 0, io.EOF }
+func (f *ctlFile) Close() error {
+	err := f.w.Close()
+	<-f.done
+	return err
+}
+func (f *ctlFile) Read(_ []byte) (int, error) { return 0, io.EOF }
