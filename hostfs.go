@@ -11,33 +11,35 @@ import (
 	"github.com/rmatsuoka/mackerelfs/internal/muxfs"
 )
 
-type devNull struct{}
-
-func (devNull) Read(_ []byte) (int, error) { return 0, io.EOF }
-
-func HostFS(client *mackerel.Client) fs.FS {
+func hostsFS(client *mackerel.Client) fs.FS {
 	m := muxfs.NewFS()
-	h := &hosts{Client: client, cache: make(map[string]string)}
+	h := &hosts{Client: client, host: make(map[string]*hostFS)}
 	m.VarFS(h)
-	m.File("reload", muxfs.ReaderFile(func() (io.Reader, error) {
-		h.reload()
-		return devNull{}, nil
+	m.File("ctl", muxfs.CtlFile(func(s string) error {
+		if s != "" {
+			return h.reload()
+		}
+		return nil
 	}))
 	return m
 }
 
 type hosts struct {
-	cache map[string]string
+	host map[string]*hostFS
 	*mackerel.Client
 }
 
+type hostFS struct {
+	fsys fs.FS
+	id   string
+}
+
 func (h *hosts) All() (muxfs.Seq[string], error) {
-	err := h.reload()
-	if err != nil {
-		return nil, err
+	if len(h.host) == 0 {
+		return nil, h.reload()
 	}
 	return func(yield func(string) bool) {
-		for k := range h.cache {
+		for k := range h.host {
 			if !yield(k) {
 				return
 			}
@@ -46,11 +48,14 @@ func (h *hosts) All() (muxfs.Seq[string], error) {
 }
 
 func (h *hosts) FS(name string) (fs.FS, bool) {
-	id, ok := h.cache[name]
+	if len(h.host) == 0 {
+		h.reload()
+	}
+	fsys, ok := h.host[name]
 	if !ok {
 		return nil, false
 	}
-	return newHostFS(h.Client, id), true
+	return fsys.fsys, true
 }
 
 func (h *hosts) reload() error {
@@ -58,8 +63,12 @@ func (h *hosts) reload() error {
 	if err != nil {
 		return err
 	}
+	clear(h.host)
 	for _, host := range hosts {
-		h.cache[host.Name] = host.ID
+		h.host[host.Name] = &hostFS{
+			id:   host.ID,
+			fsys: newHostFS(h.Client, host.ID),
+		}
 	}
 	return nil
 }
@@ -67,28 +76,42 @@ func (h *hosts) reload() error {
 func newHostFS(client *mackerel.Client, id string) fs.FS {
 	fsys := muxfs.NewFS()
 	h := &host{Client: client, id: id}
-	fsys.File("info", muxfs.ReaderFile(h.hostInfo))
+	fsys.File("info", muxfs.ReaderFile(func() (io.Reader, error) {
+		var err error
+		if len(h.info) == 0 {
+			err = h.reload()
+		}
+		return bytes.NewReader(h.info), err
+	}))
+	fsys.File("ctl", muxfs.CtlFile(func(s string) error {
+		if s != "" {
+			return h.reload()
+		}
+		return nil
+	}))
 	fsys.FS("metrics", metricFS(hostMetrics{id: id, Client: client}))
 	return fsys
 }
 
 type host struct {
 	*mackerel.Client
-	id string
+	id   string
+	info []byte
 }
 
-func (h *host) hostInfo() (io.Reader, error) {
+func (h *host) reload() error {
 	host, err := h.FindHost(h.id)
 	if err != nil {
-		return nil, err
+		return err
 	}
 	b := new(bytes.Buffer)
 	enc := json.NewEncoder(b)
 	enc.SetIndent("", "  ")
 	if err := enc.Encode(host); err != nil {
-		return nil, err
+		return err
 	}
-	return b, nil
+	h.info = b.Bytes()
+	return nil
 }
 
 type hostMetrics struct {
@@ -104,4 +127,4 @@ func (h hostMetrics) Fetch(name string, from, to int64) ([]mackerel.MetricValue,
 	return h.FetchHostMetricValues(h.id, name, from, to)
 }
 
-var _ metrics = &hostMetrics{}
+var _ metricsFetcher = &hostMetrics{}

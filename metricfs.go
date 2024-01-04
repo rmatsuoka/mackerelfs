@@ -11,28 +11,50 @@ import (
 	"github.com/rmatsuoka/mackerelfs/internal/muxfs"
 )
 
-type metrics interface {
+type metricsFetcher interface {
 	ListNames() ([]string, error)
 	Fetch(name string, from, to int64) ([]mackerel.MetricValue, error)
 }
 
-func metricFS(m metrics) fs.FS {
+func metricFS(m metricsFetcher) fs.FS {
 	mfs := muxfs.NewFS()
-	mfs.VarFS(&metricsVarFS{m})
+	v := &metricsVarFS{
+		m:       m,
+		metrics: make(map[string]bool),
+	}
+	mfs.VarFS(v)
+	mfs.File("ctl", muxfs.CtlFile(func(s string) error {
+		if s != "" {
+			return v.reload()
+		}
+		return nil
+	}))
 	return mfs
 }
 
 type metricsVarFS struct {
-	m metrics
+	m       metricsFetcher
+	metrics map[string]bool
+}
+
+func (v *metricsVarFS) reload() error {
+	l, err := v.m.ListNames()
+	if err != nil {
+		return err
+	}
+	clear(v.metrics)
+	for _, name := range l {
+		v.metrics[name] = true
+	}
+	return nil
 }
 
 func (v *metricsVarFS) All() (muxfs.Seq[string], error) {
-	l, err := v.m.ListNames()
-	if err != nil {
-		return nil, err
+	if len(v.metrics) == 0 {
+		v.reload()
 	}
 	return func(yield func(string) bool) {
-		for _, name := range l {
+		for name := range v.metrics {
 			if !yield(name) {
 				return
 			}
@@ -41,6 +63,14 @@ func (v *metricsVarFS) All() (muxfs.Seq[string], error) {
 }
 
 func (v *metricsVarFS) FS(name string) (fs.FS, bool) {
+	if len(v.metrics) == 0 {
+		v.reload()
+	}
+
+	if _, ok := v.metrics[name]; !ok {
+		return nil, false
+	}
+
 	m := muxfs.NewFS()
 	m.File("1hour", muxfs.ReaderFile(func() (io.Reader, error) {
 		now := time.Now()
