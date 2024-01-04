@@ -15,7 +15,14 @@ func main() {
 	if err != nil {
 		log.Fatal(err)
 	}
-	client := mackerel.NewClient(os.Getenv("MACKEREL_APIKEY"))
+	client, err := mackerel.NewClientWithOptions(
+		os.Getenv("MACKEREL_APIKEY"),
+		"https://api.mackerelio.com/",
+		true,
+	)
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	for {
 		conn, err := listener.Accept()

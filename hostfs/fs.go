@@ -9,6 +9,7 @@ import (
 	"github.com/mackerelio/mackerel-client-go"
 
 	"github.com/rmatsuoka/mackerelfs/internal/muxfs"
+	"github.com/rmatsuoka/mackerelfs/metricfs"
 )
 
 type devNull struct{}
@@ -68,6 +69,7 @@ func newHostFS(client *mackerel.Client, id string) fs.FS {
 	fsys := muxfs.NewFS()
 	h := &host{Client: client, id: id}
 	fsys.File("info", muxfs.ReaderFile(h.hostInfo))
+	fsys.FS("metrics", metricfs.FS(hostMetrics{id: id, Client: client}))
 	return fsys
 }
 
@@ -89,3 +91,18 @@ func (h *host) hostInfo() (io.Reader, error) {
 	}
 	return b, nil
 }
+
+type hostMetrics struct {
+	id string
+	*mackerel.Client
+}
+
+func (h hostMetrics) ListNames() ([]string, error) {
+	return h.ListHostMetricNames(h.id)
+}
+
+func (h hostMetrics) Fetch(name string, from, to int64) ([]mackerel.MetricValue, error) {
+	return h.FetchHostMetricValues(h.id, name, from, to)
+}
+
+var _ metricfs.Metrics = &hostMetrics{}
