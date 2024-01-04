@@ -25,7 +25,10 @@ type FS struct {
 }
 
 func NewFS() *FS {
-	return &FS{files: make(map[string]File)}
+	return &FS{
+		files: make(map[string]File),
+		fs:    make(map[string]fs.FS),
+	}
 }
 
 type File func(o *openArgs) (fs.File, error)
@@ -140,10 +143,6 @@ func (fsys *FS) lookup(name string) (func(o *openArgs) (fs.File, error), error) 
 		return file, nil
 	}
 
-	if fsys.varFS == nil {
-		return nil, fs.ErrNotExist
-	}
-
 	prefix := firstNode(name)
 	f, err := fsys.lookupFS(prefix)
 	if err != nil {
@@ -166,6 +165,7 @@ func (fsys *FS) lookupFS(key string) (fs.FS, error) {
 	if ok {
 		return f, nil
 	}
+
 	if fsys.varFS == nil {
 		return nil, fs.ErrNotExist
 	}

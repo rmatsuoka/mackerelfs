@@ -58,6 +58,16 @@ func TestFS(t *testing.T) {
 			t.Error(err)
 		}
 	})
+	t.Run("TestFS with FS", func(t *testing.T) {
+		f := NewFS()
+		f.FS("fsdir1", fstest.MapFS{
+			"file1":      {},
+			"dir2/file2": {},
+		})
+		if err := fstest.TestFS(f, "fsdir1", "fsdir1/file1", "fsdir1/dir2/file2"); err != nil {
+			t.Error(err)
+		}
+	})
 	t.Run("TestFS with File and Children", func(t *testing.T) {
 		f := NewFS()
 		m := make(mapChildren)
