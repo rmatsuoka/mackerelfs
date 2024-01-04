@@ -1,0 +1,8 @@
+9fans.net/go v0.0.4 h1:g7K+b5I1PlSBFLnjuco3LAx5boK39UUl0Gsrmw6Gl2U=
+9fans.net/go v0.0.4/go.mod h1:lfPdxjq9v8pVQXUMBCx5EO5oLXWQFlKRQgs1kEkjoIM=
+github.com/kylelemons/godebug v1.1.0 h1:RPNrshWIDI6G2gRW9EHilWtl7Z6Sb1BR0xunSBf0SNc=
+github.com/kylelemons/godebug v1.1.0/go.mod h1:9/0rRGxNHcop5bhtWyNeEfOS8JIWk580+fNqagV/RAw=
+github.com/mackerelio/mackerel-client-go v0.29.0 h1:GGLQZ4oco7tdIV6BZGVMxNLyU95LzNjpucMP+aGAr/8=
+github.com/mackerelio/mackerel-client-go v0.29.0/go.mod h1:b4qVMQi+w4rxtKQIFycLWXNBtIi9d0r571RzYmg/aXo=
+github.com/rmatsuoka/ya9p v0.0.0-20220503084806-5ef25d18730f h1:vLV+DCYRdIvjP57QBTaLtUacPG+hLCLZaurjHpO7jWg=
+github.com/rmatsuoka/ya9p v0.0.0-20220503084806-5ef25d18730f/go.mod h1:gYFwsVt2GQ0wOL3sSO+WttfuvDKhd5atV8btgdqmGOk=
