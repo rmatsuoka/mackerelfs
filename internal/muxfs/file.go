@@ -8,8 +8,12 @@ import (
 	"github.com/rmatsuoka/mackerelfs/internal/extfs"
 )
 
-func ReaderFile(r io.Reader) File {
+func ReaderFile(f func() (io.Reader, error)) File {
 	return func(o *openArgs) (fs.File, error) {
+		r, err := f()
+		if err != nil {
+			return nil, &fs.PathError{Op: "open", Path: o.base(), Err: err}
+		}
 		return &readerFile{Reader: r, name: o.base()}, nil
 	}
 }
@@ -18,6 +22,8 @@ type readerFile struct {
 	name string
 	io.Reader
 }
+
+var _ fs.File = &readerFile{}
 
 func (f *readerFile) Stat() (fs.FileInfo, error) {
 	return &fileInfo{name: f.name, mode: 0444}, nil
