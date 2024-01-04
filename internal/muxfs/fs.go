@@ -15,12 +15,16 @@ type Seq[T any] func(yield func(T) bool)
 
 type Children interface {
 	FS(base string) (fs.FS, bool)
-	All() Seq[fs.DirEntry]
+	All() Seq[string]
 }
 
 type FS struct {
 	files    map[string]File
 	children Children
+}
+
+func NewFS() *FS {
+	return &FS{files: make(map[string]File)}
 }
 
 type File func(o *openArgs) (fs.File, error)
@@ -70,15 +74,45 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 
 func (fsys *FS) rootEnts() []fs.DirEntry {
 	var ents []fs.DirEntry
-	for k := range fsys.files {
-		ents = append(ents, &fileInfo{name: k})
+	for name, open := range fsys.files {
+		name := name
+		open := open
+		ents = append(ents, &rootDirEntry{
+			name: name,
+			info: func() (fs.FileInfo, error) {
+				f, err := open(&openArgs{
+					name: name,
+					flag: os.O_RDONLY,
+					perm: 0,
+				})
+				if err != nil {
+					return nil, err
+				}
+				return f.Stat()
+			},
+			typ: 0,
+		})
 	}
 	if fsys.children == nil {
 		return ents
 	}
 
-	fsys.children.All()(func(e fs.DirEntry) bool {
-		ents = append(ents, e)
+	fsys.children.All()(func(name string) bool {
+		ents = append(ents, &rootDirEntry{
+			name: name,
+			info: func() (fs.FileInfo, error) {
+				f, ok := fsys.children.FS(name)
+				if !ok {
+					return nil, fs.ErrNotExist
+				}
+				s, err := fs.Stat(f, ".")
+				if err != nil {
+					return nil, err
+				}
+				return &fixedFileInfo{name: name, FileInfo: s}, nil
+			},
+			typ: fs.ModeDir,
+		})
 		return true
 	})
 
@@ -195,3 +229,16 @@ func (r *root) ReadDir(n int) ([]fs.DirEntry, error) {
 func (*root) Close() error { return nil }
 
 var _ fs.ReadDirFile = &root{}
+
+type rootDirEntry struct {
+	name string
+	info func() (fs.FileInfo, error)
+	typ  fs.FileMode
+}
+
+var _ fs.DirEntry = &rootDirEntry{}
+
+func (e *rootDirEntry) IsDir() bool                { return e.typ.IsDir() }
+func (e *rootDirEntry) Name() string               { return e.name }
+func (e *rootDirEntry) Type() fs.FileMode          { return e.typ }
+func (e *rootDirEntry) Info() (fs.FileInfo, error) { return e.info() }
