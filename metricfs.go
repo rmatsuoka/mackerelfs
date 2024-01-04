@@ -17,64 +17,26 @@ type metricsFetcher interface {
 }
 
 func metricFS(m metricsFetcher) fs.FS {
-	mfs := muxfs.NewFS()
-	v := &metricsVarFS{
-		m:       m,
-		metrics: make(map[string]bool),
-	}
-	mfs.VarFS(v)
-	mfs.File("ctl", muxfs.CtlFile(func(s string) error {
-		if s != "" {
-			return v.reload()
+	return loadFS(func() (Seq2[string, fs.FS], error) {
+		names, err := m.ListNames()
+		if err != nil {
+			return nil, err
 		}
-		return nil
-	}))
-	return mfs
-}
-
-type metricsVarFS struct {
-	m       metricsFetcher
-	metrics map[string]bool
-}
-
-func (v *metricsVarFS) reload() error {
-	l, err := v.m.ListNames()
-	if err != nil {
-		return err
-	}
-	clear(v.metrics)
-	for _, name := range l {
-		v.metrics[name] = true
-	}
-	return nil
-}
-
-func (v *metricsVarFS) All() (muxfs.Seq[string], error) {
-	if len(v.metrics) == 0 {
-		v.reload()
-	}
-	return func(yield func(string) bool) {
-		for name := range v.metrics {
-			if !yield(name) {
-				return
+		return func(yield func(string, fs.FS) bool) {
+			for _, name := range names {
+				if !yield(name, metricTSDBFS(m, name)) {
+					return
+				}
 			}
-		}
-	}, nil
+		}, nil
+	})
 }
 
-func (v *metricsVarFS) FS(name string) (fs.FS, bool) {
-	if len(v.metrics) == 0 {
-		v.reload()
-	}
-
-	if _, ok := v.metrics[name]; !ok {
-		return nil, false
-	}
-
+func metricTSDBFS(f metricsFetcher, name string) fs.FS {
 	m := muxfs.NewFS()
 	m.File("1hour", muxfs.ReaderFile(func() (io.Reader, error) {
 		now := time.Now()
-		values, err := v.m.Fetch(name, now.Add(-time.Hour).Unix(), now.Unix())
+		values, err := f.Fetch(name, now.Add(-time.Hour).Unix(), now.Unix())
 		if err != nil {
 			return nil, err
 		}
@@ -84,5 +46,5 @@ func (v *metricsVarFS) FS(name string) (fs.FS, bool) {
 		}
 		return b, err
 	}))
-	return m, true
+	return m
 }
