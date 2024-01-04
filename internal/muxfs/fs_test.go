@@ -10,14 +10,14 @@ import (
 
 type mapChildren map[string]fs.FS
 
-func (m mapChildren) All() Seq[string] {
+func (m mapChildren) All() (Seq[string], error) {
 	return func(yield func(string) bool) {
 		for k := range m {
 			if !yield(k) {
 				return
 			}
 		}
-	}
+	}, nil
 }
 
 func (m mapChildren) FS(name string) (fs.FS, bool) {

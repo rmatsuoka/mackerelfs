@@ -15,7 +15,7 @@ type Seq[T any] func(yield func(T) bool)
 
 type VarFS interface {
 	FS(base string) (fs.FS, bool)
-	All() Seq[string]
+	All() (Seq[string], error)
 }
 
 type FS struct {
@@ -66,7 +66,8 @@ func firstNode(path string) string {
 
 func (fsys *FS) OpenFile(name string, flag int, perm fs.FileMode) (fs.File, error) {
 	if name == "." {
-		return &root{ents: fsys.rootEnts()}, nil
+		ents, err := fsys.rootEnts()
+		return &root{ents: ents}, err
 	}
 
 	open, err := fsys.lookup(name)
@@ -80,7 +81,7 @@ func (fsys *FS) Open(name string) (fs.File, error) {
 	return fsys.OpenFile(name, os.O_RDONLY, 0)
 }
 
-func (fsys *FS) rootEnts() []fs.DirEntry {
+func (fsys *FS) rootEnts() ([]fs.DirEntry, error) {
 	var ents []fs.DirEntry
 	for name, open := range fsys.files {
 		name := name
@@ -102,7 +103,12 @@ func (fsys *FS) rootEnts() []fs.DirEntry {
 		})
 	}
 
-	fsys.AllFS()(func(name string) bool {
+	iter, err := fsys.allFS()
+	if err != nil {
+		return nil, err
+	}
+
+	iter(func(name string) bool {
 		ents = append(ents, &rootDirEntry{
 			name: name,
 			info: func() (fs.FileInfo, error) {
@@ -121,7 +127,7 @@ func (fsys *FS) rootEnts() []fs.DirEntry {
 		return true
 	})
 
-	return ents
+	return ents, nil
 }
 
 func (fsys *FS) lookup(name string) (func(o *openArgs) (fs.File, error), error) {
@@ -170,18 +176,25 @@ func (fsys *FS) lookupFS(key string) (fs.FS, error) {
 	return f, nil
 }
 
-func (fsys *FS) AllFS() Seq[string] {
+func (fsys *FS) allFS() (Seq[string], error) {
+	var (
+		iter Seq[string]
+		err  error
+	)
+	if fsys.varFS != nil {
+		iter, err = fsys.varFS.All()
+	}
 	return func(yield func(string) bool) {
 		for k := range fsys.fs {
 			if !yield(k) {
 				return
 			}
 		}
-		if fsys.varFS == nil {
+		if iter == nil {
 			return
 		}
-		fsys.varFS.All()(yield)
-	}
+		iter(yield)
+	}, err
 }
 
 func stripPrefix(path, prefix string) string {

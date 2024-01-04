@@ -31,15 +31,18 @@ type hosts struct {
 	*mackerel.Client
 }
 
-func (h *hosts) All() muxfs.Seq[string] {
-	h.reload()
+func (h *hosts) All() (muxfs.Seq[string], error) {
+	err := h.reload()
+	if err != nil {
+		return nil, err
+	}
 	return func(yield func(string) bool) {
 		for k := range h.cache {
 			if !yield(k) {
 				return
 			}
 		}
-	}
+	}, nil
 }
 
 func (h *hosts) FS(name string) (fs.FS, bool) {
