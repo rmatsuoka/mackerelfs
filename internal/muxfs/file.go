@@ -4,8 +4,6 @@ import (
 	"bufio"
 	"io"
 	"io/fs"
-
-	"github.com/rmatsuoka/mackerelfs/internal/extfs"
 )
 
 func ReaderFile(f func() (io.Reader, error)) File {
@@ -66,13 +64,6 @@ func newCtlFile(base string, fn func(s string) error) *ctlFile {
 func (f *ctlFile) Stat() (fs.FileInfo, error) {
 	return &fileInfo{name: f.name, mode: 0222}, nil
 }
-
-func (f *ctlFile) Write(p []byte) (int, error) {
-	return f.w.Write(p)
-}
-
-func (f *ctlFile) Close() error { return f.w.Close() }
-
-func (f *ctlFile) Read(_ []byte) (int, error) {
-	return 0, &fs.PathError{Op: "read", Path: f.name, Err: extfs.ErrNotImplemented}
-}
+func (f *ctlFile) Write(p []byte) (int, error) { return f.w.Write(p) }
+func (f *ctlFile) Close() error                { return f.w.Close() }
+func (f *ctlFile) Read(_ []byte) (int, error)  { return 0, io.EOF }

@@ -151,7 +151,6 @@ func (fsys *FS) lookup(name string) (func(o *openArgs) (fs.File, error), error) 
 }
 
 func stripPrefix(path, prefix string) string {
-	println("stripPrefix", path, prefix)
 	if prefix == "." {
 		return path
 	}
