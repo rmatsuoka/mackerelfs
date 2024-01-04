@@ -70,6 +70,7 @@ func orgFS(c *mackerel.Client) (name string, fsys fs.FS, err error) {
 	}
 	m := muxfs.NewFS()
 	m.FS("hosts", hostsFS(c))
+	m.FS("service", servicesFS(c))
 	return org.Name, m, nil
 }
 
