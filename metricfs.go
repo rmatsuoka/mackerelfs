@@ -17,7 +17,7 @@ type metricsFetcher interface {
 }
 
 func metricFS(m metricsFetcher) fs.FS {
-	return loadFS(func() (Seq2[string, fs.FS], error) {
+	return itemFS(func() (Seq2[string, fs.FS], error) {
 		names, err := m.ListNames()
 		if err != nil {
 			return nil, err

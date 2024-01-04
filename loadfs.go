@@ -9,9 +9,9 @@ import (
 
 type Seq2[K, V any] func(yield func(K, V) bool)
 
-func loadFS(f func() (Seq2[string, fs.FS], error)) fs.FS {
+func itemFS(fetch func() (Seq2[string, fs.FS], error)) fs.FS {
 	m := muxfs.NewFS()
-	varFS := &reloadVarFS{load: f, m: make(map[string]fs.FS)}
+	varFS := &itemVarFS{fetch: fetch, m: make(map[string]fs.FS)}
 	m.VarFS(varFS)
 	m.File("ctl", muxfs.CtlFile(func(s string) error {
 		f := strings.Fields(s)
@@ -23,12 +23,16 @@ func loadFS(f func() (Seq2[string, fs.FS], error)) fs.FS {
 	return m
 }
 
-type reloadVarFS struct {
-	load func() (Seq2[string, fs.FS], error)
-	m    map[string]fs.FS
+func newItemVarFS(fetch func() (Seq2[string, fs.FS], error)) *itemVarFS {
+	return &itemVarFS{fetch: fetch, m: make(map[string]fs.FS)}
 }
 
-func (f *reloadVarFS) All() (muxfs.Seq[string], error) {
+type itemVarFS struct {
+	fetch func() (Seq2[string, fs.FS], error)
+	m     map[string]fs.FS
+}
+
+func (f *itemVarFS) All() (muxfs.Seq[string], error) {
 	if len(f.m) == 0 {
 		return nil, f.reload()
 	}
@@ -41,7 +45,7 @@ func (f *reloadVarFS) All() (muxfs.Seq[string], error) {
 	}, nil
 }
 
-func (f *reloadVarFS) FS(name string) (fs.FS, bool) {
+func (f *itemVarFS) FS(name string) (fs.FS, bool) {
 	if len(f.m) == 0 {
 		f.reload()
 	}
@@ -52,8 +56,8 @@ func (f *reloadVarFS) FS(name string) (fs.FS, bool) {
 	return fsys, true
 }
 
-func (f *reloadVarFS) reload() error {
-	iter, err := f.load()
+func (f *itemVarFS) reload() error {
+	iter, err := f.fetch()
 	if err != nil {
 		return err
 	}
