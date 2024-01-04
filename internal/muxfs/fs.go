@@ -13,14 +13,15 @@ import (
 
 type Seq[T any] func(yield func(T) bool)
 
-type Children interface {
+type VarFS interface {
 	FS(base string) (fs.FS, bool)
 	All() Seq[string]
 }
 
 type FS struct {
-	files    map[string]File
-	children Children
+	files map[string]File
+	fs    map[string]fs.FS
+	varFS VarFS
 }
 
 func NewFS() *FS {
@@ -29,8 +30,15 @@ func NewFS() *FS {
 
 type File func(o *openArgs) (fs.File, error)
 
-func (f *FS) Children(c Children) {
-	f.children = c
+func (fsys *FS) FS(base string, f fs.FS) {
+	if strings.ContainsRune(base, '/') {
+		panic("base contains '/'")
+	}
+	fsys.fs[base] = f
+}
+
+func (fsys *FS) VarFS(c VarFS) {
+	fsys.varFS = c
 }
 
 type openArgs struct {
@@ -93,17 +101,14 @@ func (fsys *FS) rootEnts() []fs.DirEntry {
 			typ: 0,
 		})
 	}
-	if fsys.children == nil {
-		return ents
-	}
 
-	fsys.children.All()(func(name string) bool {
+	fsys.AllFS()(func(name string) bool {
 		ents = append(ents, &rootDirEntry{
 			name: name,
 			info: func() (fs.FileInfo, error) {
-				f, ok := fsys.children.FS(name)
-				if !ok {
-					return nil, fs.ErrNotExist
+				f, err := fsys.lookupFS(name)
+				if err != nil {
+					return nil, err
 				}
 				s, err := fs.Stat(f, ".")
 				if err != nil {
@@ -129,14 +134,14 @@ func (fsys *FS) lookup(name string) (func(o *openArgs) (fs.File, error), error) 
 		return file, nil
 	}
 
-	if fsys.children == nil {
+	if fsys.varFS == nil {
 		return nil, fs.ErrNotExist
 	}
 
 	prefix := firstNode(name)
-	f, ok := fsys.children.FS(prefix)
-	if !ok {
-		return nil, fs.ErrNotExist
+	f, err := fsys.lookupFS(prefix)
+	if err != nil {
+		return nil, err
 	}
 
 	return func(o *openArgs) (fs.File, error) {
@@ -148,6 +153,35 @@ func (fsys *FS) lookup(name string) (func(o *openArgs) (fs.File, error), error) 
 		}
 		return f, fixError(err, o.name)
 	}, nil
+}
+
+func (fsys *FS) lookupFS(key string) (fs.FS, error) {
+	f, ok := fsys.fs[key]
+	if ok {
+		return f, nil
+	}
+	if fsys.varFS == nil {
+		return nil, fs.ErrNotExist
+	}
+	f, ok = fsys.varFS.FS(key)
+	if !ok {
+		return nil, fs.ErrNotExist
+	}
+	return f, nil
+}
+
+func (fsys *FS) AllFS() Seq[string] {
+	return func(yield func(string) bool) {
+		for k := range fsys.fs {
+			if !yield(k) {
+				return
+			}
+		}
+		if fsys.varFS == nil {
+			return
+		}
+		fsys.varFS.All()(yield)
+	}
 }
 
 func stripPrefix(path, prefix string) string {

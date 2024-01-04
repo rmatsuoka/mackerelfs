@@ -36,7 +36,7 @@ func TestFS(t *testing.T) {
 		m["dir2"] = fstest.MapFS{
 			"d2_file1": {},
 		}
-		f.Children(m)
+		f.VarFS(m)
 		if err := fstest.TestFS(
 			f,
 			"dir1",
@@ -65,7 +65,7 @@ func TestFS(t *testing.T) {
 			"c1_file1":         {},
 			"c1_dir1/c1_file2": {},
 		}
-		f.Children(m)
+		f.VarFS(m)
 		f.File("file1", ReaderFile(func() (io.Reader, error) {
 			return strings.NewReader("hello"), nil
 		}))
